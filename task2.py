@@ -1,11 +1,13 @@
 import numpy as np
 import pandas as pd
 
-from net import NN
-from net.utils import Utils
-from net.loss import CrossEntropyLoss, MSELoss
-from net.activation import LogSigActivation, TanhActivation
-from net.layers import FullyConnectedLayer, ActivationLayer
+import matplotlib.pyplot as plt
+
+from nn import NN
+from nn.utils import Utils
+from nn.loss import CrossEntropyLoss, MSELoss
+from nn.activation import LogSigActivation, TanhActivation, ReLUActivation
+from nn.layers import FullyConnectedLayer, ActivationLayer
 
 
 label2int = {
@@ -22,10 +24,16 @@ int2label = {
 
 
 def load_data(path: str):
+    """
+    Load and clean the data from path
+    :param path: path to load
+    :return: cleaned train/test lists
+    """
     df = pd.read_csv(path)
     df = df.sample(frac=1)
 
-    train, test = Utils.train_test_split(df, 0.8)
+    train, test = Utils.train_test_split(df, 0.7)
+
     x_train = Utils.clean_x(train)
     x_test = Utils.clean_x(test)
 
@@ -40,27 +48,53 @@ def load_data(path: str):
 
 if __name__ == "__main__":
 
+    label_count = 3
+    show_loss = True
+    show_cm = True
+
+    # Freeze random for the consistency
+    np.random.seed(42)
+
+    # Load the data
     x_train, y_train, x_test, y_test = load_data("./IrisData.csv")
 
-    print(x_train)
-    print(y_train)
+    # Init the network
+    nn = NN(CrossEntropyLoss())
 
-    nn = NN(MSELoss())
-
+    # Stack some layers
     nn.layer(FullyConnectedLayer(4, 5))
     nn.layer(ActivationLayer(LogSigActivation()))
 
     nn.layer(FullyConnectedLayer(5, 3))
     nn.layer(ActivationLayer(LogSigActivation()))
 
-    nn.fit(x_train, y_train, 500, 0.01)
+    nn.layer(FullyConnectedLayer(3, 3))
+    nn.layer(ActivationLayer(LogSigActivation()))
 
-    for sample, gt in zip(x_test, y_test):
-        result = nn.run(sample)
-        print(result)
-        gt_index = gt.argmax(axis=0)
-        result_index = result[0].argmax(axis=0)
-        if gt_index == result_index:
-            print("CORRECT")
-        else:
-            print("INCORRECT")
+    # Train the net
+    loss_at_epoch = nn.fit(x_train, y_train, 5000, 0.01)
+
+    # Run on test set
+    predicted = [Utils.get_index_label(p[0]) for p in nn.run_all(x_test)]
+    test_labels = [Utils.get_index_label(y) for y in y_test]
+
+    # Get the confusion matrix
+    cm = Utils.get_confusion_matrix(predicted, test_labels, label_count)
+
+    # Generate some metrics
+    accuracy, precision, recall = Utils.report(cm, int2label)
+
+    if show_loss:
+        # Visualize loss at epoch
+        plt.plot(
+            list(loss_at_epoch.keys()),
+            list(loss_at_epoch.values()),
+            linestyle='-',
+            marker='o'
+        )
+
+    if show_cm:
+        # Visualize confusion matrix
+        Utils.plot_cm(cm, int2label)
+
+    plt.show()
